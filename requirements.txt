@@ -1,0 +1,8 @@
+flask
+opencv-python
+pytesseract
+pandas
+google-api-python-client
+transformers
+openpyxl
+camel-tools
