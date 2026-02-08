@@ -1,8 +1,9 @@
-torch>=2.5.0
 flask
 opencv-python
 pytesseract
+pillow
 pandas
-transformers
 openpyxl
+transformers
+torch
 regex
