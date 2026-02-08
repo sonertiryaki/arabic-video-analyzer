@@ -1,63 +1,48 @@
 import os
-from flask import Flask, request
-
-from drive import (
-    prepare_video_folder,
-    download_video_from_request,
-    upload_result,
-    already_processed,
-    mark_processed
-)
-from video import extract_frames
-from ocr import run_ocr
+from flask import Flask, request, jsonify
 from analysis import create_excel
-from mail import send_mail
-
 
 app = Flask(__name__)
 
+@app.route("/", methods=["GET"])
+def health():
+    return "Arabic Video Analyzer is running", 200
+
 
 @app.route("/process", methods=["POST"])
-def process():
+def process_video():
     """
-    Apps Script'ten gelen videoyu alır,
-    analiz eder ve sonucu hazırlar.
+    Beklenen JSON:
+    {
+        "video_path": "/opt/render/project/src/sample.mp4",
+        "output_dir": "/opt/render/project/src/output"
+    }
     """
 
-    # 1. Videoyu kaydet
-    video_file = download_video_from_request(request)
+    data = request.get_json()
 
-    # 2. Video adına göre klasör oluştur
-    folder_name, filename = prepare_video_folder(video_file)
+    if not data:
+        return jsonify({"error": "JSON body missing"}), 400
 
-    # 3. Daha önce işlendi mi kontrol et
-    if already_processed(folder_name):
-        return "already processed", 200
+    video_path = data.get("video_path")
+    output_dir = data.get("output_dir")
 
-    # 4. Videodan frame çıkar
-    frames = extract_frames(video_file)
+    if not video_path or not output_dir:
+        return jsonify({"error": "video_path or output_dir missing"}), 400
 
-    # 5. OCR ile metni oku
-    text = run_ocr(frames)
+    if not os.path.exists(video_path):
+        return jsonify({"error": "Video file not found"}), 404
 
-    # 6. Analiz & Excel oluştur
-    report_file = create_excel(text)
+    os.makedirs(output_dir, exist_ok=True)
 
-    # 7. Excel’i klasöre taşı
-    upload_result(report_file, folder_name)
+    excel_path = create_excel(video_path, output_dir)
 
-    # 8. İşlendi olarak işaretle
-    mark_processed(folder_name)
-
-    # 9. Bildirim (şimdilik console)
-    send_mail(f"{filename} analizi tamamlandı")
-
-    return "ok", 200
+    return jsonify({
+        "status": "ok",
+        "excel_file": excel_path
+    })
 
 
-# -------------------------------------------------
-# RENDER / FLASK PORT BINDING (ÇOK KRİTİK)
-# -------------------------------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
