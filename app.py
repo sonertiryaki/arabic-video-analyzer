@@ -14,13 +14,12 @@ def process_video():
     """
     Beklenen JSON:
     {
-        "video_path": "/opt/render/project/src/sample.mp4",
+        "video_path": "/opt/render/project/src/video.mp4",
         "output_dir": "/opt/render/project/src/output"
     }
     """
 
     data = request.get_json()
-
     if not data:
         return jsonify({"error": "JSON body missing"}), 400
 
@@ -31,7 +30,7 @@ def process_video():
         return jsonify({"error": "video_path or output_dir missing"}), 400
 
     if not os.path.exists(video_path):
-        return jsonify({"error": "Video file not found"}), 404
+        return jsonify({"error": "Video not found"}), 404
 
     os.makedirs(output_dir, exist_ok=True)
 
