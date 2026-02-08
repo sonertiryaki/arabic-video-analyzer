@@ -9,16 +9,14 @@ from dictionary import load_dictionary, update_dictionary
 # -----------------------------
 def normalize_arabic(text: str) -> str:
     """
-    Arapça harekeleri ve uzatma çizgisini kaldırır.
-    Örnek:
-    كِتَابٌ → كتاب
+    Arapça harekeleri ve tatvil'i kaldırır
     """
     arabic_diacritics = re.compile(r'[\u064B-\u0652\u0640]')
     return re.sub(arabic_diacritics, '', text)
 
 
 # -----------------------------
-# BASİT TRANSLITERATION (PURE PYTHON)
+# BASİT TRANSLITERATION
 # -----------------------------
 ARABIC_TO_LATIN = {
     'ا': 'a', 'ب': 'b', 'ت': 't', 'ث': 'th',
@@ -32,36 +30,31 @@ ARABIC_TO_LATIN = {
 }
 
 def transliterate(word: str) -> str:
-    """
-    Basit Arapça → Latin okunuş üretir.
-    """
     return ''.join(ARABIC_TO_LATIN.get(ch, ch) for ch in word)
 
 
 # -----------------------------
-# ÇEVİRİ MODELİ (ÜCRETSİZ)
+# ÇEVİRİ PIPELINE (DOĞRU TASK)
 # -----------------------------
 translator = pipeline(
-    "translation",
+    task="translation_ar_to_tr",
     model="Helsinki-NLP/opus-mt-ar-tr"
 )
 
 
 # -----------------------------
-# ANA ANALİZ FONKSİYONU
+# ANA ANALİZ
 # -----------------------------
 def create_excel(text: str) -> str:
 
-    # kelimeleri ayıkla + duplicate temizle
-    raw_words = set(text.split())
+    words = set(text.split())
 
     dictionary_df = load_dictionary()
     known_words = set(dictionary_df["Arabic"])
 
     results = []
 
-    for word in raw_words:
-
+    for word in words:
         clean = normalize_arabic(word)
 
         if len(clean) < 2:
@@ -75,14 +68,8 @@ def create_excel(text: str) -> str:
         okunus = transliterate(clean)
         is_new = clean not in known_words
 
-        results.append([
-            clean,
-            okunus,
-            meaning,
-            is_new
-        ])
+        results.append([clean, okunus, meaning, is_new])
 
-    # merkezi sözlüğü güncelle
     update_dictionary(results)
 
     df = pd.DataFrame(
