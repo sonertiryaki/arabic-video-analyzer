@@ -1,83 +1,91 @@
-import re
+import os
+import cv2
+import pytesseract
 import pandas as pd
+import regex as re
 from transformers import pipeline
-from dictionary import load_dictionary, update_dictionary
 
 
-# -----------------------------
-# ARAPÇA NORMALİZASYON
-# -----------------------------
-def normalize_arabic(text: str) -> str:
+# ===============================
+# TRANSLATOR (LAZY LOAD)
+# ===============================
+translator = None
+
+def get_translator():
+    global translator
+    if translator is None:
+        translator = pipeline(
+            model="Helsinki-NLP/opus-mt-ar-tr"
+        )
+    return translator
+
+
+# ===============================
+# ARABIC TEXT CLEAN
+# ===============================
+def clean_arabic(text: str) -> str:
     """
-    Arapça harekeleri ve tatvil'i kaldırır
+    Arapça hareke ve tatweel temizleme
     """
-    arabic_diacritics = re.compile(r'[\u064B-\u0652\u0640]')
-    return re.sub(arabic_diacritics, '', text)
+    harakat_pattern = r"[\u064B-\u0652\u0670\u0640]"
+    text = re.sub(harakat_pattern, "", text)
+    return text.strip()
 
 
-# -----------------------------
-# BASİT TRANSLITERATION
-# -----------------------------
-ARABIC_TO_LATIN = {
-    'ا': 'a', 'ب': 'b', 'ت': 't', 'ث': 'th',
-    'ج': 'j', 'ح': 'h', 'خ': 'kh',
-    'د': 'd', 'ذ': 'dh', 'ر': 'r', 'ز': 'z',
-    'س': 's', 'ش': 'sh', 'ص': 's', 'ض': 'd',
-    'ط': 't', 'ظ': 'z', 'ع': '‘', 'غ': 'gh',
-    'ف': 'f', 'ق': 'q', 'ك': 'k', 'ل': 'l',
-    'م': 'm', 'ن': 'n', 'ه': 'h', 'و': 'w',
-    'ي': 'y', 'ء': '', 'ى': 'a', 'ة': 'h'
-}
+# ===============================
+# OCR FROM VIDEO
+# ===============================
+def extract_text_from_video(video_path):
+    cap = cv2.VideoCapture(video_path)
 
-def transliterate(word: str) -> str:
-    return ''.join(ARABIC_TO_LATIN.get(ch, ch) for ch in word)
+    texts = set()
+    frame_count = 0
 
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
 
-# -----------------------------
-# ÇEVİRİ PIPELINE (DOĞRU TASK)
-# -----------------------------
-translator = pipeline(
-    task="translation_ar_to_tr",
-    model="Helsinki-NLP/opus-mt-ar-tr"
-)
+        frame_count += 1
 
-
-# -----------------------------
-# ANA ANALİZ
-# -----------------------------
-def create_excel(text: str) -> str:
-
-    words = set(text.split())
-
-    dictionary_df = load_dictionary()
-    known_words = set(dictionary_df["Arabic"])
-
-    results = []
-
-    for word in words:
-        clean = normalize_arabic(word)
-
-        if len(clean) < 2:
+        # Her 20 frame'de bir OCR (performans için)
+        if frame_count % 20 != 0:
             continue
 
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        text = pytesseract.image_to_string(gray, lang="ara")
+
+        for line in text.split("\n"):
+            cleaned = clean_arabic(line)
+            if len(cleaned) > 1:
+                texts.add(cleaned)
+
+    cap.release()
+    return list(texts)
+
+
+# ===============================
+# MAIN ANALYSIS
+# ===============================
+def create_excel(video_path, output_dir):
+    arabic_texts = extract_text_from_video(video_path)
+    translator = get_translator()
+
+    rows = []
+
+    for ar in arabic_texts:
         try:
-            meaning = translator(clean)[0]["translation_text"]
+            tr = translator(ar)[0]["translation_text"]
         except Exception:
-            meaning = ""
+            tr = ""
 
-        okunus = transliterate(clean)
-        is_new = clean not in known_words
+        rows.append({
+            "Arapça": ar,
+            "Türkçe Anlam": tr
+        })
 
-        results.append([clean, okunus, meaning, is_new])
+    df = pd.DataFrame(rows)
+    excel_path = os.path.join(output_dir, "analysis.xlsx")
+    df.to_excel(excel_path, index=False)
 
-    update_dictionary(results)
-
-    df = pd.DataFrame(
-        results,
-        columns=["Arabic", "Okunus", "Turkce", "NEW"]
-    )
-
-    output_file = "analysis.xlsx"
-    df.to_excel(output_file, index=False)
-
-    return output_file
+    return excel_path
