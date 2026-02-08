@@ -5,10 +5,9 @@ import pandas as pd
 import regex as re
 from transformers import pipeline
 
-
-# ===============================
-# TRANSLATOR (LAZY LOAD)
-# ===============================
+# =====================================================
+# TRANSLATOR (LAZY LOAD – DOĞRU VE STABİL)
+# =====================================================
 translator = None
 
 def get_translator():
@@ -20,21 +19,19 @@ def get_translator():
     return translator
 
 
-# ===============================
+# =====================================================
 # ARABIC TEXT CLEAN
-# ===============================
+# =====================================================
 def clean_arabic(text: str) -> str:
-    """
-    Arapça hareke ve tatweel temizleme
-    """
-    harakat_pattern = r"[\u064B-\u0652\u0670\u0640]"
-    text = re.sub(harakat_pattern, "", text)
+    # Unicode Arapça hareke + tatweel temizleme
+    pattern = r"[\u064B-\u0652\u0670\u0640]"
+    text = re.sub(pattern, "", text)
     return text.strip()
 
 
-# ===============================
+# =====================================================
 # OCR FROM VIDEO
-# ===============================
+# =====================================================
 def extract_text_from_video(video_path):
     cap = cv2.VideoCapture(video_path)
 
@@ -48,14 +45,14 @@ def extract_text_from_video(video_path):
 
         frame_count += 1
 
-        # Her 20 frame'de bir OCR (performans için)
+        # Performans için her 20 frame
         if frame_count % 20 != 0:
             continue
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        text = pytesseract.image_to_string(gray, lang="ara")
+        ocr_text = pytesseract.image_to_string(gray, lang="ara")
 
-        for line in text.split("\n"):
+        for line in ocr_text.split("\n"):
             cleaned = clean_arabic(line)
             if len(cleaned) > 1:
                 texts.add(cleaned)
@@ -64,9 +61,9 @@ def extract_text_from_video(video_path):
     return list(texts)
 
 
-# ===============================
+# =====================================================
 # MAIN ANALYSIS
-# ===============================
+# =====================================================
 def create_excel(video_path, output_dir):
     arabic_texts = extract_text_from_video(video_path)
     translator = get_translator()
@@ -75,7 +72,8 @@ def create_excel(video_path, output_dir):
 
     for ar in arabic_texts:
         try:
-            tr = translator(ar)[0]["translation_text"]
+            result = translator(ar)
+            tr = result[0]["translation_text"]
         except Exception:
             tr = ""
 
