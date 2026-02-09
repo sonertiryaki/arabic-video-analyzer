@@ -1,45 +1,61 @@
-import os
 from flask import Flask, request, jsonify
-from analysis import create_excel
+import os
+import tempfile
+
+from ocr import extract_text_from_video
+from analysis import analyze_text
+from excel_writer import write_excel
 
 app = Flask(__name__)
 
+
 @app.route("/", methods=["GET"])
-def health():
-    return "Arabic Video Analyzer is running", 200
+def health_check():
+    return "Arabic Video Analyzer is running ✅", 200
 
 
 @app.route("/process", methods=["POST"])
 def process_video():
-    """
-    Beklenen JSON:
-    {
-        "video_path": "/opt/render/project/src/video.mp4",
-        "output_dir": "/opt/render/project/src/output"
-    }
-    """
+    try:
+        data = request.get_json()
 
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "JSON body missing"}), 400
+        video_name = data.get("video_name")
+        drive_file_id = data.get("drive_file_id")
 
-    video_path = data.get("video_path")
-    output_dir = data.get("output_dir")
+        if not video_name or not drive_file_id:
+            return jsonify({"error": "Eksik parametre"}), 400
 
-    if not video_path or not output_dir:
-        return jsonify({"error": "video_path or output_dir missing"}), 400
+        # Şimdilik video download yok (ileride eklenecek)
+        # OCR + analiz pipeline'ı simüle metinle başlatıyoruz
+        # (Drive download ekleyince burası gerçek video olacak)
 
-    if not os.path.exists(video_path):
-        return jsonify({"error": "Video not found"}), 404
+        print(f"📥 Video alındı: {video_name}")
 
-    os.makedirs(output_dir, exist_ok=True)
+        # ÖRNEK METİN (şimdilik)
+        raw_text = extract_text_from_video(None)
 
-    excel_path = create_excel(video_path, output_dir)
+        # Analiz
+        analysis_result = analyze_text(raw_text)
 
-    return jsonify({
-        "status": "ok",
-        "excel_file": excel_path
-    })
+        # Excel yaz
+        output_dir = tempfile.mkdtemp()
+        excel_path = os.path.join(
+            output_dir, f"{video_name}_analysis.xlsx"
+        )
+
+        write_excel(analysis_result, excel_path)
+
+        print(f"📊 Excel oluşturuldu: {excel_path}")
+
+        return jsonify({
+            "status": "success",
+            "video": video_name,
+            "excel": excel_path
+        }), 200
+
+    except Exception as e:
+        print("❌ HATA:", str(e))
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
