@@ -1,59 +1,105 @@
+import os
+import cv2
+import pytesseract
 import re
+from excel_writer import write_excel
+
+
+TEMP_DIR = "temp"
+OUTPUT_DIR = "output"
+
+os.makedirs(TEMP_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+
+def analyze_video(video_name: str, drive_file_id: str) -> str:
+    """
+    Ana analiz fonksiyonu
+    """
+    video_path = download_video_stub(video_name)
+    frames_text = extract_text_from_video(video_path)
+
+    cleaned = clean_and_deduplicate(frames_text)
+
+    excel_path = write_excel(
+        video_name=video_name,
+        rows=cleaned
+    )
+
+    return excel_path
+
 
 # --------------------------------------------------
-# ARAPÇA HAREKE TEMİZLEME
+# VIDEO INDIRME (SIMDI STUB)
 # --------------------------------------------------
-ARABIC_DIACRITICS = re.compile(
-    r"[\u064B-\u065F\u0670\u0640]"
-)
 
-def remove_diacritics(text: str) -> str:
+def download_video_stub(video_name: str) -> str:
     """
-    Arapça harekeleri temizler
+    Şimdilik video indirme yok.
+    Render tarafında test için boş video path döndürür.
     """
-    return re.sub(ARABIC_DIACRITICS, "", text)
+    fake_path = os.path.join(TEMP_DIR, video_name)
+    open(fake_path, "a").close()
+    return fake_path
 
 
 # --------------------------------------------------
-# ANALİZ ANA FONKSİYONU
+# VIDEO -> OCR
 # --------------------------------------------------
-def analyze_video(video_name: str, drive_file_id: str):
+
+def extract_text_from_video(video_path: str):
     """
-    Video analiz simülasyonu
-    (Bir sonraki adımda OCR buraya bağlanacak)
+    Videodan belirli aralıklarla frame alıp OCR uygular
     """
+    cap = cv2.VideoCapture(video_path)
+    texts = []
 
-    print(f"🔍 Analiz başlatıldı: {video_name}")
+    frame_index = 0
 
-    # --------------------------------------------------
-    # ŞİMDİLİK SAHTE OCR ÇIKTISI
-    # (Gerçek OCR sonraki adım)
-    # --------------------------------------------------
-    ocr_texts = [
-        "إِنَّ اللَّهَ غَفُورٌ رَحِيمٌ",
-        "إِنَّ اللَّهَ غَفُورٌ رَحِيمٌ",
-        "وَاللَّهُ عَلَىٰ كُلِّ شَيْءٍ قَدِيرٌ",
-        "اللَّهُ نُورُ السَّمَاوَاتِ وَالْأَرْضِ"
-    ]
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
 
-    results = []
+        # Her 30 frame'de bir OCR
+        if frame_index % 30 == 0:
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            text = pytesseract.image_to_string(
+                gray,
+                lang="ara"
+            )
+            if text.strip():
+                texts.append(text)
+
+        frame_index += 1
+
+    cap.release()
+    return texts
+
+
+# --------------------------------------------------
+# TEMIZLIK + DUPLICATE
+# --------------------------------------------------
+
+def clean_and_deduplicate(texts):
+    """
+    - Harekeleri temizler
+    - Satır bazlı böler
+    - Tekrar edenleri siler
+    """
     seen = set()
+    rows = []
 
-    for text in ocr_texts:
-        normalized = remove_diacritics(text)
+    for block in texts:
+        lines = block.splitlines()
 
-        # duplicate detection
-        if normalized in seen:
-            continue
+        for line in lines:
+            line = normalize_arabic(line)
 
-        seen.add(normalized)
+            if not line:
+                continue
 
-        results.append({
-            "arabic": text,
-            "arabic_normalized": normalized,
-            "turkish": "Türkçe anlam daha sonra eklenecek"
-        })
+            if line in seen:
+                continue
 
-    print(f"✅ Analiz tamamlandı: {len(results)} benzersiz kayıt")
-
-    return results
+            seen.add(line)
