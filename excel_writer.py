@@ -1,34 +1,61 @@
 from openpyxl import Workbook
-from typing import List
+from openpyxl.styles import Font
+from datetime import datetime
 import os
 
 
-def create_excel(sentences: List[str], words: List[str], output_path: str) -> str:
+def create_excel(video_name: str, analysis_results: list):
     """
-    2 sayfalı Excel oluşturur:
-    - Cumleler
-    - Kelimeler
+    Analiz sonuçlarından Excel dosyası oluşturur
     """
 
     wb = Workbook()
+    ws = wb.active
+    ws.title = "Analiz Sonuçları"
 
-    # === CÜMLELER SAYFASI ===
-    ws_sentences = wb.active
-    ws_sentences.title = "Cumleler"
-    ws_sentences.append(["No", "Cumle"])
+    # --------------------------------------------------
+    # BAŞLIKLAR
+    # --------------------------------------------------
+    headers = [
+        "Orijinal Arapça",
+        "Harekesi Temizlenmiş Arapça",
+        "Türkçe Anlam"
+    ]
 
-    for idx, sentence in enumerate(sentences, start=1):
-        ws_sentences.append([idx, sentence])
+    header_font = Font(bold=True)
 
-    # === KELİMELER SAYFASI ===
-    ws_words = wb.create_sheet(title="Kelimeler")
-    ws_words.append(["No", "Kelime"])
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = header_font
 
-    for idx, word in enumerate(words, start=1):
-        ws_words.append([idx, word])
+    # --------------------------------------------------
+    # SATIRLAR
+    # --------------------------------------------------
+    for item in analysis_results:
+        ws.append([
+            item.get("arabic", ""),
+            item.get("arabic_normalized", ""),
+            item.get("turkish", "")
+        ])
 
-    # === KAYDET ===
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    # --------------------------------------------------
+    # SÜTUN GENİŞLİKLERİ
+    # --------------------------------------------------
+    ws.column_dimensions["A"].width = 40
+    ws.column_dimensions["B"].width = 40
+    ws.column_dimensions["C"].width = 50
+
+    # --------------------------------------------------
+    # DOSYA ADI
+    # --------------------------------------------------
+    safe_video_name = video_name.replace(" ", "_").replace("/", "_")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    file_name = f"{safe_video_name}_{timestamp}.xlsx"
+    output_path = os.path.join("/tmp", file_name)
+
     wb.save(output_path)
+
+    print(f"📁 Excel oluşturuldu: {output_path}")
 
     return output_path
