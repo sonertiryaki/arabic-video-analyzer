@@ -1,105 +1,45 @@
-import os
 import cv2
 import pytesseract
 import re
-from excel_writer import write_excel
-
-
-TEMP_DIR = "temp"
-OUTPUT_DIR = "output"
-
-os.makedirs(TEMP_DIR, exist_ok=True)
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-
-def analyze_video(video_name: str, drive_file_id: str) -> str:
-    """
-    Ana analiz fonksiyonu
-    """
-    video_path = download_video_stub(video_name)
-    frames_text = extract_text_from_video(video_path)
-
-    cleaned = clean_and_deduplicate(frames_text)
-
-    excel_path = write_excel(
-        video_name=video_name,
-        rows=cleaned
-    )
-
-    return excel_path
+import os
+from excel_writer import create_excel
 
 
 # --------------------------------------------------
-# VIDEO INDIRME (SIMDI STUB)
+# ARAPÇA HAREKE TEMİZLEME (NET VE OKUNAKLI)
 # --------------------------------------------------
+ARABIC_DIACRITICS_PATTERN = re.compile(
+    r"[\u064B\u064C\u064D\u064E\u064F\u0650\u0651\u0652\u0640]"
+)
 
-def download_video_stub(video_name: str) -> str:
-    """
-    Şimdilik video indirme yok.
-    Render tarafında test için boş video path döndürür.
-    """
-    fake_path = os.path.join(TEMP_DIR, video_name)
-    open(fake_path, "a").close()
-    return fake_path
+
+def normalize_arabic(text: str) -> str:
+    return re.sub(ARABIC_DIACRITICS_PATTERN, "", text).strip()
 
 
 # --------------------------------------------------
-# VIDEO -> OCR
+# OCR SONUCU TEMİZLEME
 # --------------------------------------------------
+def clean_text(text: str) -> list:
+    lines = text.split("\n")
+    cleaned = []
 
-def extract_text_from_video(video_path: str):
-    """
-    Videodan belirli aralıklarla frame alıp OCR uygular
-    """
+    for line in lines:
+        line = line.strip()
+        if len(line) < 2:
+            continue
+        if not re.search(r"[\u0600-\u06FF]", line):
+            continue
+        cleaned.append(line)
+
+    return cleaned
+
+
+# --------------------------------------------------
+# ANA ANALİZ FONKSİYONU
+# --------------------------------------------------
+def analyze_video(video_path: str, video_name: str):
     cap = cv2.VideoCapture(video_path)
-    texts = []
 
-    frame_index = 0
-
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
-
-        # Her 30 frame'de bir OCR
-        if frame_index % 30 == 0:
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            text = pytesseract.image_to_string(
-                gray,
-                lang="ara"
-            )
-            if text.strip():
-                texts.append(text)
-
-        frame_index += 1
-
-    cap.release()
-    return texts
-
-
-# --------------------------------------------------
-# TEMIZLIK + DUPLICATE
-# --------------------------------------------------
-
-def clean_and_deduplicate(texts):
-    """
-    - Harekeleri temizler
-    - Satır bazlı böler
-    - Tekrar edenleri siler
-    """
-    seen = set()
-    rows = []
-
-    for block in texts:
-        lines = block.splitlines()
-
-        for line in lines:
-            line = normalize_arabic(line)
-
-            if not line:
-                continue
-
-            if line in seen:
-                continue
-
-            seen.add(line)
+    if not cap.isOpened():
+        raise Exception("V
