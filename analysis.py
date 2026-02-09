@@ -1,87 +1,32 @@
-import os
-import cv2
-import pytesseract
-import pandas as pd
-import regex as re
-from transformers import pipeline
-
-# =====================================================
-# TRANSLATOR (LAZY LOAD – STABLE)
-# =====================================================
-translator = None
-
-def get_translator():
-    global translator
-    if translator is None:
-        translator = pipeline(
-            model="Helsinki-NLP/opus-mt-ar-tr"
-        )
-    return translator
+from typing import List, Tuple
+from ocr import extract_text_from_video
 
 
-# =====================================================
-# ARABIC TEXT CLEAN
-# =====================================================
-def clean_arabic(text: str) -> str:
-    # Unicode Arapça hareke + tatweel temizleme
-    pattern = r"[\u064B-\u0652\u0670\u0640]"
-    return re.sub(pattern, "", text).strip()
+def extract_words_from_sentences(sentences: List[str]) -> List[str]:
+    """
+    Cümle listesinden TEKRARSIZ kelime listesi çıkarır
+    """
+    words_set = set()
+
+    for sentence in sentences:
+        for word in sentence.split():
+            if len(word) < 2:
+                continue
+            words_set.add(word)
+
+    return sorted(words_set)
 
 
-# =====================================================
-# OCR FROM VIDEO (DUPLICATE FREE)
-# =====================================================
-def extract_text_from_video(video_path):
-    cap = cv2.VideoCapture(video_path)
+def analyze_video(video_path: str) -> Tuple[List[str], List[str]]:
+    """
+    Video analizinin ana fonksiyonu
 
-    texts = set()
-    frame_index = 0
+    DÖNER:
+    - cümleler (tekrarsız)
+    - kelimeler (tekrarsız)
+    """
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+    sentences = extract_text_from_video(video_path)
+    words = extract_words_from_sentences(sentences)
 
-        frame_index += 1
-
-        # Performans için her 20 frame
-        if frame_index % 20 != 0:
-            continue
-
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        ocr_result = pytesseract.image_to_string(gray, lang="ara")
-
-        for line in ocr_result.split("\n"):
-            cleaned = clean_arabic(line)
-            if len(cleaned) > 1:
-                texts.add(cleaned)
-
-    cap.release()
-    return list(texts)
-
-
-# =====================================================
-# MAIN ANALYSIS
-# =====================================================
-def create_excel(video_path, output_dir):
-    arabic_texts = extract_text_from_video(video_path)
-    translator = get_translator()
-
-    rows = []
-
-    for ar in arabic_texts:
-        try:
-            tr = translator(ar)[0]["translation_text"]
-        except Exception:
-            tr = ""
-
-        rows.append({
-            "Arapça": ar,
-            "Türkçe Anlam": tr
-        })
-
-    df = pd.DataFrame(rows)
-    excel_path = os.path.join(output_dir, "analysis.xlsx")
-    df.to_excel(excel_path, index=False)
-
-    return excel_path
+    return sentences, words
