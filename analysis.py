@@ -1,32 +1,59 @@
-from typing import List, Tuple
-from ocr import extract_text_from_video
+import re
 
+# --------------------------------------------------
+# ARAPÇA HAREKE TEMİZLEME
+# --------------------------------------------------
+ARABIC_DIACRITICS = re.compile(
+    r"[\u064B-\u065F\u0670\u0640]"
+)
 
-def extract_words_from_sentences(sentences: List[str]) -> List[str]:
+def remove_diacritics(text: str) -> str:
     """
-    Cümle listesinden TEKRARSIZ kelime listesi çıkarır
+    Arapça harekeleri temizler
     """
-    words_set = set()
-
-    for sentence in sentences:
-        for word in sentence.split():
-            if len(word) < 2:
-                continue
-            words_set.add(word)
-
-    return sorted(words_set)
+    return re.sub(ARABIC_DIACRITICS, "", text)
 
 
-def analyze_video(video_path: str) -> Tuple[List[str], List[str]]:
+# --------------------------------------------------
+# ANALİZ ANA FONKSİYONU
+# --------------------------------------------------
+def analyze_video(video_name: str, drive_file_id: str):
     """
-    Video analizinin ana fonksiyonu
-
-    DÖNER:
-    - cümleler (tekrarsız)
-    - kelimeler (tekrarsız)
+    Video analiz simülasyonu
+    (Bir sonraki adımda OCR buraya bağlanacak)
     """
 
-    sentences = extract_text_from_video(video_path)
-    words = extract_words_from_sentences(sentences)
+    print(f"🔍 Analiz başlatıldı: {video_name}")
 
-    return sentences, words
+    # --------------------------------------------------
+    # ŞİMDİLİK SAHTE OCR ÇIKTISI
+    # (Gerçek OCR sonraki adım)
+    # --------------------------------------------------
+    ocr_texts = [
+        "إِنَّ اللَّهَ غَفُورٌ رَحِيمٌ",
+        "إِنَّ اللَّهَ غَفُورٌ رَحِيمٌ",
+        "وَاللَّهُ عَلَىٰ كُلِّ شَيْءٍ قَدِيرٌ",
+        "اللَّهُ نُورُ السَّمَاوَاتِ وَالْأَرْضِ"
+    ]
+
+    results = []
+    seen = set()
+
+    for text in ocr_texts:
+        normalized = remove_diacritics(text)
+
+        # duplicate detection
+        if normalized in seen:
+            continue
+
+        seen.add(normalized)
+
+        results.append({
+            "arabic": text,
+            "arabic_normalized": normalized,
+            "turkish": "Türkçe anlam daha sonra eklenecek"
+        })
+
+    print(f"✅ Analiz tamamlandı: {len(results)} benzersiz kayıt")
+
+    return results
